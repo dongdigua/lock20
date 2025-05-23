@@ -6,12 +6,15 @@ use gtk::prelude::*;
 use gtk4_session_lock::Instance as SessionLockInstance;
 use adw;
 
+use notify_rust::Notification;
+
 use std::rc::Rc;
 use std::cell::RefCell;
 
 fn main() {
     if !gtk4_session_lock::is_supported() {
-        println!("Session lock not supported")
+        println!("Session lock not supported");
+        return;
     }
 
     let app = adw::Application::new(
@@ -34,8 +37,14 @@ fn main() {
 }
 
 fn schedule_lock(app: adw::Application) {
-    // one-shot timer
-    glib::timeout_add_seconds_local_once(5, move || {
+    // thank you ChatGPT
+    glib::timeout_add_seconds_local_once(11, move || {
+        Notification::new()
+            .summary("10 seconds remaining before lock")
+            .body("Your screen will get locked for 20 seconds to make sure that you relax your eyes. Run twenty -k to stop.")
+            .show()
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_secs(10));
         do_lock(app.clone());
     });
 }
@@ -51,7 +60,6 @@ fn do_lock(app: adw::Application) {
             schedule_lock(app.clone());
         }
     ));
-
 
     if !lock.lock() {
         // Error message already shown when handling the ::failed signal
@@ -70,20 +78,17 @@ fn do_lock(app: adw::Application) {
         window.set_child(Some(&label));
 
         let lock_clone = lock.clone();
-        let countdown = Rc::new(RefCell::new(5));
-        label.set_text("5"); // initial
+        let countdown = Rc::new(RefCell::new(20));
+        label.set_text("20"); // initial
         let tick = move || {
             let mut secs = *countdown.borrow();
             if secs == 0 {
-                // time's up → unlock
                 lock_clone.unlock();
-                // stop the timer
                 return ControlFlow::Break;
             }
-            // decrement and update label
             secs -= 1;
             *countdown.borrow_mut() = secs;
-            label.set_text(&format!("{}", secs));
+            label.set_markup(&format!("<span size='{}'>{}</span>", 20-secs, secs));
             ControlFlow::Continue
         };
 

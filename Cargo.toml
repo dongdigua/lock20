@@ -7,3 +7,4 @@ edition = "2024"
 adw = { version = "0.7.2", package = "libadwaita" }
 gtk4 = "0.9"
 gtk4-session-lock = "0.1"
+notify-rust = { version = "4", default-features = false, features = ["d"] }
