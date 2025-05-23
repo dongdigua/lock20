@@ -1,0 +1,9 @@
+[package]
+name = "lock20"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+gtk4 = "0.9"
+gtk4-layer-shell = "0.5"
+gtk4-session-lock = "0.1"
