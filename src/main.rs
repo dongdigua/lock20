@@ -6,6 +6,9 @@ use gtk::prelude::*;
 use gtk4_session_lock::Instance as SessionLockInstance;
 use adw;
 
+use std::rc::Rc;
+use std::cell::RefCell;
+
 fn main() {
     if !gtk4_session_lock::is_supported() {
         println!("Session lock not supported")
@@ -64,23 +67,27 @@ fn do_lock(app: adw::Application) {
         lock.assign_window_to_monitor(&window, &monitor);
 
         let label = gtk::Label::default();
-
         window.set_child(Some(&label));
-        let tick = move || {
-            let time = format!("{:?}", Instant::now());
-            label.set_text(&time);
 
-            // we could return glib::ControlFlow::Break to stop our clock after this tick
-            // glib::ControlFlow::Break
+        let lock_clone = lock.clone();
+        let countdown = Rc::new(RefCell::new(5));
+        label.set_text("5"); // initial
+        let tick = move || {
+            let mut secs = *countdown.borrow();
+            if secs == 0 {
+                // time's up → unlock
+                lock_clone.unlock();
+                // stop the timer
+                return ControlFlow::Break;
+            }
+            // decrement and update label
+            secs -= 1;
+            *countdown.borrow_mut() = secs;
+            label.set_text(&format!("{}", secs));
+            ControlFlow::Continue
         };
 
-        let lock = lock.clone();
-        let do_unlock = clone!(
-            #[weak] lock,
-            move || lock.unlock()
-        );
-        glib::source::timeout_add_seconds_local_once(5, do_unlock);
-        // glib::source::timeout_add_seconds_local_once(1, tick);
+        glib::source::timeout_add_seconds_local(1, tick);
 
         window.present();
     }
