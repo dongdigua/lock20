@@ -38,7 +38,7 @@ fn main() {
 
 fn schedule_lock(app: adw::Application) {
     // thank you ChatGPT
-    glib::timeout_add_seconds_local_once(11, move || {
+    glib::timeout_add_seconds_local_once(1190, move || {
         Notification::new()
             .summary("10 seconds remaining before lock")
             .body("Your screen will get locked for 20 seconds to make sure that you relax your eyes. Run twenty -k to stop.")
@@ -88,7 +88,7 @@ fn do_lock(app: adw::Application) {
             }
             secs -= 1;
             *countdown.borrow_mut() = secs;
-            label.set_markup(&format!("<span size='{}'>{}</span>", 20-secs, secs));
+            label.set_markup(&format!("<span font='{}'>{}</span>", 30-secs, secs));
             ControlFlow::Continue
         };
 
