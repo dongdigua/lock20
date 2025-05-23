@@ -1,34 +1,49 @@
 use gtk4 as gtk;
 use gtk4::glib::{self, clone, ControlFlow};
+use gtk4::gio::prelude::*;
 use gtk4::gdk;
 use gtk::prelude::*;
 use gtk4_session_lock::Instance as SessionLockInstance;
+use adw;
+use std::time::{Duration,Instant};
+use std::thread;
+use std::sync::mpsc::sync_channel;
 
 fn main() {
     if !gtk4_session_lock::is_supported() {
         println!("Session lock not supported")
     }
 
-    let app = gtk::Application::new(
+    init();
+}
+
+fn init() {
+    thread::sleep(Duration::from_secs(5));
+    lock();
+}
+
+fn lock() {
+    let app = adw::Application::new(
         Some("com.github.wmww.gtk4-layer-shell.session-lock-example"),
         Default::default(),
     );
+
 
     app.connect_activate(activate);
     app.run();
 }
 
-fn activate(app: &gtk::Application) {
-    glib::timeout_add_seconds(10, clone!(
-        #[strong] app,
-        #[upgrade_or] ControlFlow::Break,
-        move || {
-            display_lock(&app);
-            ControlFlow::Break
-        }));
-}
-fn display_lock(app: &gtk::Application) {
+fn activate(app: &adw::Application) {
     let lock = SessionLockInstance::new();
+    lock.connect_unlocked(clone!(
+        #[weak] app,
+        move |_| {
+            for w in app.windows() {
+                w.close();
+            }
+        }
+    ));
+
 
     if !lock.lock() {
         // Error message already shown when handling the ::failed signal
@@ -43,18 +58,26 @@ fn display_lock(app: &gtk::Application) {
         let window = gtk::ApplicationWindow::new(app);
         lock.assign_window_to_monitor(&window, &monitor);
 
-        let button = gtk::Button::builder()
-            .label("Unlock")
-            .halign(gtk::Align::Center)
-            .valign(gtk::Align::Center)
-            .build();
+        let label = gtk::Label::default();
+
+        window.set_child(Some(&label));
+        let tick = move || {
+            let time = format!("{:?}", Instant::now());
+            label.set_text(&time);
+
+            // we could return glib::ControlFlow::Break to stop our clock after this tick
+            // glib::ControlFlow::Break
+        };
 
         let lock = lock.clone();
-        button.connect_clicked(move |_| lock.unlock());
+        let do_unlock = clone!(
+            #[weak] lock,
+            move || lock.unlock()
+        );
+        glib::source::timeout_add_seconds_local_once(5, do_unlock);
+        // glib::source::timeout_add_seconds_local_once(1, tick);
 
-        window.set_child(Some(&button));
         window.present();
     }
-
 }
 
