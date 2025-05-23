@@ -5,35 +5,39 @@ use gtk4::gdk;
 use gtk::prelude::*;
 use gtk4_session_lock::Instance as SessionLockInstance;
 use adw;
-use std::time::{Duration,Instant};
-use std::thread;
-use std::sync::mpsc::sync_channel;
 
 fn main() {
     if !gtk4_session_lock::is_supported() {
         println!("Session lock not supported")
     }
 
-    init();
-}
-
-fn init() {
-    thread::sleep(Duration::from_secs(5));
-    lock();
-}
-
-fn lock() {
     let app = adw::Application::new(
         Some("com.github.wmww.gtk4-layer-shell.session-lock-example"),
         Default::default(),
     );
 
+    app.connect_startup(move |app| {
+        let dummy = gtk::ApplicationWindow::builder()
+            .application(app)
+            .default_width(0)
+            .default_height(0)
+            .visible(false)   // ah, I still have a window => holds
+            .build();
+        app.add_window(&dummy);
+    });
 
-    app.connect_activate(activate);
+    app.connect_activate(move |app| schedule_lock(app.clone()));
     app.run();
 }
 
-fn activate(app: &adw::Application) {
+fn schedule_lock(app: adw::Application) {
+    // one-shot timer
+    glib::timeout_add_seconds_local_once(5, move || {
+        do_lock(app.clone());
+    });
+}
+
+fn do_lock(app: adw::Application) {
     let lock = SessionLockInstance::new();
     lock.connect_unlocked(clone!(
         #[weak] app,
@@ -41,6 +45,7 @@ fn activate(app: &adw::Application) {
             for w in app.windows() {
                 w.close();
             }
+            schedule_lock(app.clone());
         }
     ));
 
@@ -55,7 +60,7 @@ fn activate(app: &adw::Application) {
 
     for monitor in monitors.iter::<glib::Object>() {
         let monitor = monitor.unwrap().downcast::<gdk::Monitor>().unwrap();
-        let window = gtk::ApplicationWindow::new(app);
+        let window = gtk::ApplicationWindow::new(&app);
         lock.assign_window_to_monitor(&window, &monitor);
 
         let label = gtk::Label::default();
