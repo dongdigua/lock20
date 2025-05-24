@@ -23,6 +23,7 @@ fn main() {
     );
 
     app.connect_startup(move |app| {
+        // thank you ChatGPT
         let dummy = gtk::ApplicationWindow::builder()
             .application(app)
             .default_width(0)
@@ -37,11 +38,10 @@ fn main() {
 }
 
 fn schedule_lock(app: adw::Application) {
-    // thank you ChatGPT
     glib::timeout_add_seconds_local_once(1190, move || {
         Notification::new()
             .summary("10 seconds remaining before lock")
-            .body("Your screen will get locked for 20 seconds to make sure that you relax your eyes. Run twenty -k to stop.")
+            .body("Your screen will get locked for 20 seconds to make sure that you relax your eyes.")
             .show()
             .unwrap();
         std::thread::sleep(std::time::Duration::from_secs(10));
