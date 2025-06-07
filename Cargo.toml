@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-adw = { version = "0.7.2", package = "libadwaita" }
-gtk4 = "0.9"
+gtk4 = { version = "0.9", features = ["v4_18"] }
 gtk4-session-lock = "0.1"
 notify-rust = { version = "4", default-features = false, features = ["d"] }
+nix = { version = "0.30", features = ["signal"] }

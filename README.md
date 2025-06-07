@@ -4,8 +4,7 @@ Lock your screen for 20s every 20min
 ## Usage
 just run `lock20`
 
-### Themeing
-use `darkman` to set libadwaita theme
+to skip once, send a SIGUSR1: `pkill -10 lock20`
 
 ### Caveats
 When locked, killing the app may cause a "red screen"
@@ -21,4 +20,3 @@ So I want to build one with fewer deps (<120) and (probably) [some fun features]
 
 ## TODO
 - [ ] CraftMine-like text shaking
-

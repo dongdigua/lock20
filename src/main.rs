@@ -1,15 +1,22 @@
 use gtk4 as gtk;
-use gtk4::glib::{self, clone, ControlFlow};
-use gtk4::gio::prelude::*;
-use gtk4::gdk;
 use gtk::prelude::*;
-use gtk4_session_lock::Instance as SessionLockInstance;
-use adw;
+use gtk::glib::{self, ControlFlow};
+use gtk::gdk;
 
 use notify_rust::Notification;
 
-use std::rc::Rc;
-use std::cell::RefCell;
+use nix::sys::signal::{self, Signal, SigHandler};
+
+use std::sync::atomic::{AtomicBool, Ordering};
+
+mod ui;
+
+static SKIP: AtomicBool = AtomicBool::new(false);
+
+extern "C" fn handle_sigusr1(signal: nix::libc::c_int) {
+    let signal = Signal::try_from(signal).unwrap();
+    SKIP.store(signal == Signal::SIGUSR1, Ordering::Relaxed);
+}
 
 fn main() {
     if !gtk4_session_lock::is_supported() {
@@ -17,12 +24,16 @@ fn main() {
         return;
     }
 
-    let app = adw::Application::new(
-        Some("com.github.wmww.gtk4-layer-shell.session-lock-example"),
+    let handler = SigHandler::Handler(handle_sigusr1);
+    unsafe { signal::signal(Signal::SIGUSR1, handler) }.unwrap();
+
+    let app = gtk::Application::new(
+        Some("com.github.dongdigua.lock20"),
         Default::default(),
     );
 
     app.connect_startup(move |app| {
+        load_css();
         // thank you ChatGPT
         let dummy = gtk::ApplicationWindow::builder()
             .application(app)
@@ -37,64 +48,38 @@ fn main() {
     app.run();
 }
 
-fn schedule_lock(app: adw::Application) {
-    glib::timeout_add_seconds_local_once(1190, move || {
-        Notification::new()
-            .summary("10 seconds remaining before lock")
-            .body("Your screen will get locked for 20 seconds to make sure that you relax your eyes.")
-            .show()
-            .unwrap();
-        std::thread::sleep(std::time::Duration::from_secs(10));
-        do_lock(app.clone());
-    });
+fn load_css() {
+    let provider = gtk::CssProvider::new();
+    provider.load_from_string(".background{background-color: black;} label{color:white;}");
+    gtk::style_context_add_provider_for_display(
+        &gdk::Display::default().expect("Could not connect to a display."),
+        &provider,
+        gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+    );
 }
 
-fn do_lock(app: adw::Application) {
-    let lock = SessionLockInstance::new();
-    lock.connect_unlocked(clone!(
-        #[weak] app,
-        move |_| {
-            for w in app.windows() {
-                w.close();
-            }
-            schedule_lock(app.clone());
+fn schedule_lock(app: gtk::Application) {
+    // for testing: must > 31s, otherwise the sleep below will block the display before unlocking
+    glib::timeout_add_seconds_local(1190, move || {
+        std::thread::spawn(move || {
+            Notification::new()
+                .summary("10 seconds remaining before lock")
+                .body("Your screen will get locked for 20 seconds to make sure that you relax your eyes.")
+                .action("skip", "skip")
+                .show()
+                .unwrap()
+                .wait_for_action(|_| SKIP.store(true, Ordering::Relaxed));
+        });
+
+        std::thread::sleep(std::time::Duration::from_millis(10000));
+
+        if SKIP.load(Ordering::Relaxed) {
+            println!("skipped");
+            SKIP.store(false, Ordering::Relaxed);
+        } else {
+            ui::do_lock(app.clone());
         }
-    ));
-
-    if !lock.lock() {
-        // Error message already shown when handling the ::failed signal
-        return;
-    }
-
-    let display = gdk::Display::default().unwrap();
-    let monitors = display.monitors();
-
-    for monitor in monitors.iter::<glib::Object>() {
-        let monitor = monitor.unwrap().downcast::<gdk::Monitor>().unwrap();
-        let window = gtk::ApplicationWindow::new(&app);
-        lock.assign_window_to_monitor(&window, &monitor);
-
-        let label = gtk::Label::default();
-        window.set_child(Some(&label));
-
-        let lock_clone = lock.clone();
-        let countdown = Rc::new(RefCell::new(20));
-        label.set_text("20"); // initial
-        let tick = move || {
-            let mut secs = *countdown.borrow();
-            if secs == 0 {
-                lock_clone.unlock();
-                return ControlFlow::Break;
-            }
-            secs -= 1;
-            *countdown.borrow_mut() = secs;
-            label.set_markup(&format!("<span font='{}'>{}</span>", 30-secs, secs));
-            ControlFlow::Continue
-        };
-
-        glib::source::timeout_add_seconds_local(1, tick);
-
-        window.present();
-    }
+        ControlFlow::Continue
+    });
 }
 
