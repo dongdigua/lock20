@@ -3,13 +3,14 @@ use gtk::prelude::*;
 use gtk::glib::{self, ControlFlow};
 use gtk::gdk;
 
-use notify_rust::Notification;
+use notify_rust::{Notification, Hint};
 
 use nix::sys::signal::{self, Signal, SigHandler};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 mod ui;
+mod log;
 
 static SKIP: AtomicBool = AtomicBool::new(false);
 
@@ -62,13 +63,20 @@ fn schedule_lock(app: gtk::Application) {
     // for testing: must > 31s, otherwise the sleep below will block the display before unlocking
     glib::timeout_add_seconds_local(1190, move || {
         std::thread::spawn(move || {
+            // FIXME: the thread will wait until the button is clicked or the notification is closed
             Notification::new()
                 .summary("10 seconds remaining before lock")
                 .body("Your screen will get locked for 20 seconds to make sure that you relax your eyes.")
                 .action("skip", "skip")
+                .timeout(std::time::Duration::from_millis(5000))
                 .show()
                 .unwrap()
-                .wait_for_action(|_| SKIP.store(true, Ordering::Relaxed));
+                .wait_for_action(|action| match action {
+                    "skip" => SKIP.store(true, Ordering::Relaxed),
+                    "__closed" => debug!("closed"), // deprecate in 5.0.0
+                    _ => debug!("what?")
+                });
+            debug!("notification closed");
         });
 
         std::thread::sleep(std::time::Duration::from_millis(10000));
